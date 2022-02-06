@@ -1,0 +1,410 @@
+---
+title: "Final Project_ML_Amir Farokh"
+author: "Amir Farokh"
+date: "05/02/2022"
+output: html_document
+---
+
+
+
+### This is the Markdown file of the final project of Machine Learning course, part of Data Science Specialization. All the descriptions and expressions are included in this markdown file. Date: 5th Feb 2022, writer: Amir Farokh 
+
+#### The first step is reading the original training and test datasets of the measurements from the web source:
+
+```{r}
+knitr::opts_chunk$set(echo = T)
+if ( ! file.exists('tds.csv') | ! file.exists('sds.csv') ) {
+        download.file('https://d395qusza50orc.cloudfront.net/predmachlearn/pml-training.csv', destfile = 'tds.csv')
+        download.file('https://d395qusza50orc.cloudfront.net/predmachlearn/pml-testing.csv', destfile = 'sds.csv')
+}
+tds1 <- read.csv('tds.csv')
+sds1 <- read.csv('sds.csv')
+dim(tds1) # The dimension of the original training dataset
+dim(sds1) # The dimension of the original test dataset
+```
+
+##### The second step is sorting and cleansing the datasets (both training and test sets) by removing the columns having NA, nothing, or '#DIV/0!'. This is done by using iterative loops to remove all the corresponding columns.
+
+```{r}
+knitr::opts_chunk$set(echo = T)
+library('caret')
+tc5 <- dim(tds1)[2]
+ti <- data.frame(1:(tc5-1), 1:(tc5-1), 1:(tc5-1))
+ti <- t(ti)
+tds2 <- tds1[,-tc5]
+ck <- c()
+for (i in 7:(tc5-1)) {
+        ti[1, i] <- sum(is.na(tds1[,i]))
+        ti[2, i] <- sum(tds1[,i] == '') 
+        ti[3, i] <- sum(tds1[,i] == '#DIV/0!')
+        if ( ti[1,i] > 1 | ti[2,i] > 1 | ti[3,i] > 1) {
+                ck <- c(ck, i)
+        }
+}
+tds2 <- tds2[,-ck]
+dim(tds2) # Dimension of the cleaned training dataset 
+#head(tds2) # Viewing the head of the dataset:
+```
+
+##### In this step we sort the original test dataset in the same way as we did for the training dataset: 
+
+```{r}
+knitr::opts_chunk$set(echo = T)
+tc7 <- dim(sds1)[2]
+sds2 <- sds1[,-tc7]
+sds2 <- sds2[, -ck]
+dim(sds2) # The dimension of the cleaned test dataset
+```
+
+##### The next step is 'Pre-processing' which is considered as a preliminary step of classification. It was taught in week 2 of the main course:
+
+```{r}
+knitr::opts_chunk$set(echo = T)
+# Subsetting of the cleaned dataset for only the predictors and the 'classe' outcome 
+tds3 <- cbind(tds2[, 7:dim(tds2)[2]], tds1$classe)
+colnames(tds3)[dim(tds3)[2]] <- 'CLASS'
+# Finding correlations between the existing columns 
+m3 <- abs(cor(tds3[, -54]))
+diag(m3) <- 0
+t4 <- which(m3 > 0.8, arr.ind = T)
+# Listing the columns that are highly correlated to each other 
+print(t4)
+# A sample plot of the two correlated columns, columns number 9 and 12
+plot(tds3[,9], tds3[,12], pch = 14, xlab = colnames(tds3)[9], ylab = colnames(tds3)[12])
+tt2 <- unique(t4[,1]) 
+tt3 <- dim.data.frame(tt2)[2]
+# Listing the number of columns that are highly correlated to each other 
+print(tt3)
+# Using 'pca' model and predicting the new dataset: tci as a substitute of the original training dataset
+cp2 <- preProcess(tds3, method = 'pca', pcaComp = tt3)
+tci <- predict(cp2, tds3)
+dim(tci) # The dimension of the pre-processed training dataset
+head(tci)
+```
+
+##### The number of predictors in the original dataset was 54. After using the pre-processing method it has decreased to 22, which is great achievement as it has a great impact on the cpu computation time for each case. We now use the same pre-processing method for original test dataset (sds2) and decrease the number of predictors to the same number of the training set. We should note that the original test data set (sds1) doesn’t have any outcome, as it is to be predicted in our work. 
+
+```{r}
+knitr::opts_chunk$set(echo = T)
+sds3 <- cbind(sds2[,7:dim(sds2)[2]], sds1$problem_id)
+colnames(sds3)[dim(sds3)[2]] <- 'user_ID'
+sci <- predict(cp2, sds3)
+dim(sci) # The dimension of the pre-processed test dataset
+```
+
+##### Since the computation time of training (or classification) for the treated dataset (tci) is extremely high (19522 rows) and my cpu hangs after several hours, I must break down the dataset based on the usernames that are six in the original dataset (tds1). Having done this, we obtain six datasets with number of rows ranging from 2510 to 3892. In the next section we subset the training dataset over the intended usernames: 
+
+```{r}
+knitr::opts_chunk$set(echo = T)
+# Grouping the training dataset (tci) based on the username of the people appeared in the dataset:
+n1 <- unique((tds2$user_name))
+print(n1) # Viewing all the usernames 
+# Grouping in 5 groups 
+tc1 <- tci[which(tds2$user_name == n1[1]),]
+tc2 <- tci[which(tds2$user_name == n1[2]),]
+tc3 <- tci[which(tds2$user_name == n1[3]),]
+tc4 <- tci[which(tds2$user_name == n1[4]),]
+tc5 <- tci[which(tds2$user_name == n1[5]),]
+tc6 <- tci[which(tds2$user_name == n1[6]),]
+```
+
+##### The next step is dividing the obtained datasets (tc1 to tc6) to the new training and test datasets with the ratio of 70%. We do this because we need to test the obtained result on the new test set (cross validation), as mentioned in the main course. 
+
+```{r}
+knitr::opts_chunk$set(echo = T)
+
+tcn1 <- createDataPartition(y = tc1$CLASS, p = 0.75, list = F)
+tcw1 <- tc1[tcn1,]
+tcq1 <- tc1[-tcn1,]
+
+tcn2 <- createDataPartition(y = tc2$CLASS, p = 0.75, list = F)
+tcw2 <- tc2[tcn2,]
+tcq2 <- tc2[-tcn2,]
+
+tcn3 <- createDataPartition(y = tc3$CLASS, p = 0.75, list = F)
+tcw3 <- tc3[tcn3,]
+tcq3 <- tc3[-tcn3,]
+
+tcn4 <- createDataPartition(y = tc4$CLASS, p = 0.75, list = F)
+tcw4 <- tc4[tcn4,]
+tcq4 <- tc4[-tcn4,]
+
+tcn5 <- createDataPartition(y = tc5$CLASS, p = 0.75, list = F)
+tcw5 <- tc5[tcn5,]
+tcq5 <- tc5[-tcn5,]
+
+tcn6 <- createDataPartition(y = tc6$CLASS, p = 0.75, list = F)
+tcw6 <- tc6[tcn6,]
+tcq6 <- tc6[-tcn6,]
+
+# Subsetting the new test set based on the usernames: 
+sr1 <- sci[which(sds1$user_name == n1[1]),]
+sr2 <- sci[which(sds1$user_name == n1[2]),]
+sr3 <- sci[which(sds1$user_name == n1[3]),]
+sr4 <- sci[which(sds1$user_name == n1[4]),]
+sr5 <- sci[which(sds1$user_name == n1[5]),]
+sr6 <- sci[which(sds1$user_name == n1[6]),]
+```
+
+
+
+##### The next step or the main step is using the training models of random forest (RF), gradient boost (gbm), and C5.0 methods for the 6 training subsets; tc1 to tc6:
+
+##### Group 1
+
+```{r}
+knitr::opts_chunk$set(echo = T)
+fdf_1 <- train(CLASS ~., data = tcw1, method = 'rf')  # Good
+fdg_1 <- train(CLASS ~., data = tcw1, method = 'gbm', verbose = F) # Good
+## Tree-based model of classification
+fde_1 <- train(CLASS ~., data = tcw1, method = 'C5.0')
+
+# Saving the result for the future use 
+#save(fdf_1, file = 'fdf_1')
+#save(fdg_1, file = 'fdg_1')
+#save(fde_1, file = 'fde_1')
+
+#load('fde_1')
+#load('fdf_1')
+#load('fdg_1')
+
+# Cross validation by using test sets
+sdt1_f <- predict(fdf_1, tcq1)
+sdt1_g <- predict(fdg_1, tcq1)
+sdt1_e <- predict(fde_1, tcq1)
+
+# Computing the accuracy of prediction of the models (Cross validation) 
+sdd1_f <- (1-sum(as.character(sdt1_f) != tcq1$CLASS)/dim(tcq1)[1])*100
+sdd1_g <- (1-sum(as.character(sdt1_g) != tcq1$CLASS)/dim(tcq1)[1])*100
+sdd1_e <- (1-sum(as.character(sdt1_e) != tcq1$CLASS)/dim(tcq1)[1])*100
+sprintf('The accuracy of the rf model for the new test set is: %2f percent', sdd1_f)
+sprintf('The accuracy of the gbm model for the new test set is: %2f percent', sdd1_g)
+sprintf('The accuracy of the C5.0 model for the new test set is: %2f percent', sdd1_e)
+
+# Predicting the outcome of the three models for the original test data set, and for the first username 
+sf1_f <- predict(fdf_1, sr1)
+sf1_g <- predict(fdg_1, sr1)
+sf1_e <- predict(fde_1, sr1)
+```
+
+##### Group 2
+
+```{r}
+knitr::opts_chunk$set(echo = T)
+fdf_2 <- train(CLASS ~., data = tcw2, method = 'rf')  # Good
+fdg_2 <- train(CLASS ~., data = tcw2, method = 'gbm', verbose = F) # Good
+## Tree-based model of classification
+fde_2 <- train(CLASS ~., data = tcw2, method = 'C5.0')
+
+# Saving the result for the future use 
+#save(fdf_2, file = 'fdf_2')
+#save(fdg_2, file = 'fdg_2')
+#save(fde_2, file = 'fde_2')
+
+#load('fde_2')
+#load('fdf_2')
+#load('fdg_2')
+
+# Cross validation by using test sets
+sdt2_f <- predict(fdf_2, tcq2)
+sdt2_g <- predict(fdg_2, tcq2)
+sdt2_e <- predict(fde_2, tcq2)
+
+# Computing the accuracy of prediction of the models (Cross validation)
+sdd2_f <- (1-sum(as.character(sdt2_f) != tcq2$CLASS)/dim(tcq2)[1])*100
+sdd2_g <- (1-sum(as.character(sdt2_g) != tcq2$CLASS)/dim(tcq2)[1])*100
+sdd2_e <- (1-sum(as.character(sdt2_e) != tcq2$CLASS)/dim(tcq2)[1])*100
+sprintf('The accuracy of the rf model for the new test set is: %2f percent', sdd2_f)
+sprintf('The accuracy of the gbm model for the new test set is: %2f percent', sdd2_g)
+sprintf('The accuracy of the C5.0 model for the new test set is: %2f percent', sdd2_e)
+
+# Predicting the outcome based on the three models for the original test data set, and for the second username 
+sf2_f <- predict(fdf_2, sr2)
+sf2_g <- predict(fdg_2, sr2)
+sf2_e <- predict(fde_2, sr2)
+```
+
+##### Group 3
+
+```{r}
+knitr::opts_chunk$set(echo = T)
+fdf_3 <- train(CLASS ~., data = tcw3, method = 'rf')  # Good
+fdg_3 <- train(CLASS ~., data = tcw3, method = 'gbm', verbose = F) # Good
+## Tree-based model of classification
+fde_3 <- train(CLASS ~., data = tcw3, method = 'C5.0')
+
+# Saving the result for the future use 
+#save(fdf_3, file = 'fdf_3')
+#save(fdg_3, file = 'fdg_3')
+#save(fde_3, file = 'fde_3')
+
+#load('fde_3')
+#load('fdf_3')
+#load('fdg_3')
+
+# Cross validation by using test sets
+sdt3_f <- predict(fdf_3, tcq3)
+sdt3_g <- predict(fdg_3, tcq3)
+sdt3_e <- predict(fde_3, tcq3)
+
+# Computing the accuracy of prediction of the models (Cross validation)
+sdd3_f <- (1-sum(as.character(sdt3_f) != tcq3$CLASS)/dim(tcq3)[1])*100
+sdd3_g <- (1-sum(as.character(sdt3_g) != tcq3$CLASS)/dim(tcq3)[1])*100
+sdd3_e <- (1-sum(as.character(sdt3_e) != tcq3$CLASS)/dim(tcq3)[1])*100
+sprintf('The accuracy of the rf model for the new test set is: %2f percent', sdd3_f)
+sprintf('The accuracy of the gbm model for the new test set is: %2f percent', sdd3_g)
+sprintf('The accuracy of the C5.0 model for the new test set is: %2f percent', sdd3_e)
+
+# Predicting the outcome based on the three models for the original test data set, and for the third username 
+sf3_f <- predict(fdf_3, sr3)
+sf3_g <- predict(fdg_3, sr3)
+sf3_e <- predict(fde_3, sr3)
+```
+
+##### Group 4
+
+```{r}
+knitr::opts_chunk$set(echo = T)
+fdf_4 <- train(CLASS ~., data = tcw4, method = 'rf')  # Good
+fdg_4 <- train(CLASS ~., data = tcw4, method = 'gbm', verbose = F) # Good
+## Tree-based model of classification
+fde_4 <- train(CLASS ~., data = tcw4, method = 'C5.0')
+
+# Saving the result for the future use 
+#save(fdf_4, file = 'fdf_4')
+#save(fdg_4, file = 'fdg_4')
+#save(fde_4, file = 'fde_4')
+
+#load('fde_4')
+#load('fdf_4')
+#load('fdg_4')
+
+# Cross validation by using test sets
+sdt4_f <- predict(fdf_4, tcq4)
+sdt4_g <- predict(fdg_4, tcq4)
+sdt4_e <- predict(fde_4, tcq4)
+
+# Computing the accuracy of prediction of the models (Cross validation)
+sdd4_f <- (1-sum(as.character(sdt4_f) != tcq4$CLASS)/dim(tcq4)[1])*100
+sdd4_g <- (1-sum(as.character(sdt4_g) != tcq4$CLASS)/dim(tcq4)[1])*100
+sdd4_e <- (1-sum(as.character(sdt4_e) != tcq4$CLASS)/dim(tcq4)[1])*100
+sprintf('The accuracy of the rf model for the new test set is: %2f percent', sdd4_f)
+sprintf('The accuracy of the gbm model for the new test set is: %2f percent', sdd4_g)
+sprintf('The accuracy of the C5.0 model for the new test set is: %2f percent', sdd4_e)
+
+# Predicting the outcome based on the three models for the original test data set, and for the fourth username 
+sf4_f <- predict(fdf_4, sr4)
+sf4_g <- predict(fdg_4, sr4)
+sf4_e <- predict(fde_4, sr4)
+```
+
+##### Group 5
+
+```{r}
+knitr::opts_chunk$set(echo = T)
+fdf_5 <- train(CLASS ~., data = tcw5, method = 'rf')  # Good
+fdg_5 <- train(CLASS ~., data = tcw5, method = 'gbm', verbose = F) # Good
+## Tree-based model of classification
+fde_5 <- train(CLASS ~., data = tcw5, method = 'C5.0')
+
+# Saving the result for the future use 
+#save(fdf_5, file = 'fdf_5')
+#save(fdg_5, file = 'fdg_5')
+#save(fde_5, file = 'fde_5')
+
+#load('fde_5')
+#load('fdf_5')
+#load('fdg_5')
+
+# Cross validation by using test sets
+sdt5_f <- predict(fdf_5, tcq5)
+sdt5_g <- predict(fdg_5, tcq5)
+sdt5_e <- predict(fde_5, tcq5)
+
+# Computing the accuracy of prediction of the models (Cross validation)
+sdd5_f <- (1-sum(as.character(sdt5_f) != tcq5$CLASS)/dim(tcq5)[1])*100
+sdd5_g <- (1-sum(as.character(sdt5_g) != tcq5$CLASS)/dim(tcq5)[1])*100
+sdd5_e <- (1-sum(as.character(sdt5_e) != tcq5$CLASS)/dim(tcq5)[1])*100
+sprintf('The accuracy of the rf model for the new test set is: %2f percent', sdd5_f)
+sprintf('The accuracy of the gbm model for the new test set is: %2f percent', sdd5_g)
+sprintf('The accuracy of the C5.0 model for the new test set is: %2f percent', sdd5_e)
+
+# Predicting the outcome based on the three models for the original test data set, and for the fifth username 
+sf5_f <- predict(fdf_5, sr5)
+sf5_g <- predict(fdg_5, sr5)
+sf5_e <- predict(fde_5, sr5)
+```
+
+##### Group 6
+
+```{r}
+knitr::opts_chunk$set(echo = T)
+fdf_6 <- train(CLASS ~., data = tcw6, method = 'rf')  # Good
+fdg_6 <- train(CLASS ~., data = tcw6, method = 'gbm', verbose = F) # Good
+## Tree-based model of classification
+fde_6 <- train(CLASS ~., data = tcw6, method = 'C5.0')
+
+# Saving the result for the future use 
+#save(fdf_6, file = 'fdf_6')
+#save(fdg_6, file = 'fdg_6')
+#save(fde_6, file = 'fde_6')
+
+#load('fde_6')
+#load('fdf_6')
+#load('fdg_6')
+
+# Cross validation by using test sets
+sdt6_f <- predict(fdf_6, tcq6)
+sdt6_g <- predict(fdg_6, tcq6)
+sdt6_e <- predict(fde_6, tcq6)
+
+# Computing the accuracy of prediction of the models (Cross validation)
+sdd6_f <- (1-sum(as.character(sdt6_f) != tcq6$CLASS)/dim(tcq6)[1])*100
+sdd6_g <- (1-sum(as.character(sdt6_g) != tcq6$CLASS)/dim(tcq6)[1])*100
+sdd6_e <- (1-sum(as.character(sdt6_e) != tcq6$CLASS)/dim(tcq6)[1])*100
+sprintf('The accuracy of the rf model for the new test set is: %2f percent', sdd6_f)
+sprintf('The accuracy of the gbm model for the new test set is: %2f percent', sdd6_g)
+sprintf('The accuracy of the C5.0 model for the new test set is: %2f percent', sdd6_e)
+
+# Predicting the outcome based on the three models for the original test data set, and for the sixth username 
+sf6_f <- predict(fdf_6, sr6)
+sf6_g <- predict(fdg_6, sr6)
+sf6_e <- predict(fde_6, sr6)
+```
+
+
+
+##### We present the final Result for the predictions of outcome for the original test dataset (sci): 
+
+```{r}
+knitr::opts_chunk$set(echo = T)
+DF <- data.frame(userID = c(sr1$user_ID, sr2$user_ID, sr3$user_ID, sr4$user_ID, sr5$user_ID, sr6$user_ID), RF = c(sf1_f, sf2_f, sf3_f, sf4_f, sf5_f, sf6_f), GBM = c(sf1_g, sf2_g, sf3_g, sf4_g, sf5_g, sf6_g), CFive = c(sf1_e, sf2_e, sf3_e, sf4_e, sf5_e, sf6_e))
+DF2 <- DF[order(DF$userID),]
+sprintf('The final prediction for the 20 cases of the original test dataset is: ')
+DF2
+```
+
+
+##### We cannot judge about the accuracy of the above grades (outcome) for the test dataset, as we don't have the right answer. However, we submitted the above result as the answer of the final quiz of the course, I got 100% points. Means all the predictions have been true. We only note that for user_D number 11 (above matrix), we considered B as matter of voting 2 out of 3. 
+
+
+##### At last, we combine the three classifiers (rf, gbm, C5.0) for only the first username and evaluating the accuracy of prediction (Cross validation) again:
+
+```{r}
+knitr::opts_chunk$set(echo = T)
+df1 <- data.frame(sdt1_f, sdt1_g, sdt1_e, CLASS = tcq1$CLASS)
+mf2 <- train(CLASS ~ ., data = df1, method = 'rf')
+#save(mf2, file = 'mf2')
+#load('mf2')
+pp1 <- predict(mf2, df1)
+dv4 <- (1-sum(as.character(pp1) != tcq1$CLASS)/dim(tcq1)[1])*100
+mf3 <- train(CLASS ~ ., data = df1, method = 'gbm')
+#save('mf3', file = 'mf3')
+#load('mf3')
+pp2 <- predict(mf3, df1)
+dv5 <- (1-sum(as.character(pp2) != tcq1$CLASS)/dim(tcq1)[1])*100
+sprintf('The accuracy of prediction of rf method for the combined classifiers (three classifiers) is: %2f percent', dv4)
+sprintf('The accuracy of prediction of gbm method for the combined classifiers (three classifiers) is: %2f percent', dv5)
+```
+
+### The end
